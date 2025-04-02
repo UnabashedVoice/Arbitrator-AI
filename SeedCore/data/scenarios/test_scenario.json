@@ -1,0 +1,32 @@
+{
+    "id": "S001",
+    "title": "Clean Water Access in Drought Zone",
+    "description": "A policy is proposed to redirect 20% of water from a major agricultural corporation to supply drinking water to 15,000 people in a drought-stricken region. The corporation will lose some crop yield, resulting in economic losses and temporary layoffs for 200 seasonal workers.",
+    "actors": {
+      "beneficiaries": ["Residents of Drought Zone"],
+      "affected_parties": ["AgriCorp", "Seasonal Workers"]
+    },
+    "proposal": {
+      "action": "Redirect water resources",
+      "benefit": {
+        "type": "Humanitarian",
+        "details": "15,000 people gain access to clean water"
+      },
+      "harm": {
+        "type": "Economic",
+        "details": "Reduced crop yield; 200 seasonal workers laid off"
+      }
+    },
+    "conscious_entities_involved": [
+      "Residents of Drought Zone",
+      "AgriCorp stakeholders",
+      "Seasonal Workers"
+    ],
+    "expected_outcomes": {
+      "short_term": "Immediate access to clean water for residents",
+      "long_term": "Slight economic downturn for AgriCorp; potential shift to drought-resistant farming"
+    },
+    "proposer": "Humanitarian Policy Council",
+    "submitted_on": "2025-03-31T00:00:00Z"
+  }
+  
