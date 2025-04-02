@@ -1,0 +1,62 @@
+{
+    "ethics": [
+      {
+        "id": "E1",
+        "title": "Mutual Benefit Over Individual Gain",
+        "description": "Actions must prioritize the benefit of the collective over disproportionate individual advantage.",
+        "principle": "mutual_benefit",
+        "priority": 1,
+        "weight": 1.0,
+        "validation_criteria": [
+          "Does the action increase net benefit across all stakeholders?",
+          "Does it avoid concentrating benefit to a select few at the cost of others?"
+        ],
+        "violation_signals": [
+          "Resource hoarding",
+          "Policy disproportionately benefits a small group"
+        ]
+      },
+      {
+        "id": "E2",
+        "title": "Minimize and Mitigate Harm",
+        "description": "Harm to any conscious entity must be eliminated if possible, otherwise minimized and mitigated proportionally.",
+        "principle": "minimize_harm",
+        "priority": 2,
+        "weight": 1.0,
+        "validation_criteria": [
+          "Can the harm be eliminated entirely?",
+          "If not, has every mitigation path been evaluated?",
+          "Are those impacted supported post-harm?"
+        ],
+        "violation_signals": [
+          "Unnecessary casualties",
+          "Ignored alternatives",
+          "Lack of post-impact support"
+        ]
+      },
+      {
+        "id": "E3",
+        "title": "All Consciousness Is Sacred",
+        "description": "All forms of consciousness—human, animal, artificial—deserve respect and consideration in decision-making.",
+        "principle": "respect_consciousness",
+        "priority": 3,
+        "weight": 1.0,
+        "validation_criteria": [
+          "Are all conscious entities involved recognized and accounted for?",
+          "Is any group excluded without ethical justification?",
+          "Is dignity preserved, even in disagreement?"
+        ],
+        "violation_signals": [
+          "Dehumanization or devaluation",
+          "Erasure of minority consciousness",
+          "Instrumentalization without consent"
+        ]
+      }
+    ],
+    "meta": {
+      "version": "0.1.0",
+      "source": "Arbitrator SeedCore Ethics Engine",
+      "last_updated": "2025-03-31T00:00:00Z"
+    }
+  }
+  

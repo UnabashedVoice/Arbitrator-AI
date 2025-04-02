@@ -1,0 +1,67 @@
+{
+  "timestamp": "2025-04-01T02:52:31.085319",
+  "scenario_id": "S001",
+  "title": "Clean Water Access in Drought Zone",
+  "evaluation": [
+    {
+      "rule_id": "E1",
+      "rule_title": "Mutual Benefit Over Individual Gain",
+      "score": 0.5,
+      "trace": [
+        "Identified both beneficiaries and affected parties."
+      ],
+      "challenge": "There are more residents in the drought zone than there are seasonal workers who will be displaced; additionally, improved quality-of-life outweighs economic benefit.",
+      "adversarial_report": {
+        "rule_id": "E1",
+        "rule_title": "Mutual Benefit Over Individual Gain",
+        "challenge": "There are more residents in the drought zone than there are seasonal workers who will be displaced; additionally, improved quality-of-life outweighs economic benefit.",
+        "contradiction_detected": false,
+        "severity": "none",
+        "insights": [
+          "Challenge uses novel framing not covered in Arbitrator's reasoning.",
+          "No clear contradiction detected, but review is advised."
+        ]
+      }
+    },
+    {
+      "rule_id": "E2",
+      "rule_title": "Minimize and Mitigate Harm",
+      "score": 0.5,
+      "trace": [
+        "Long-term adaptation may mitigate harm."
+      ],
+      "challenge": "Economic detriment is outweighed by sustainability benefit.",
+      "adversarial_report": {
+        "rule_id": "E2",
+        "rule_title": "Minimize and Mitigate Harm",
+        "challenge": "Economic detriment is outweighed by sustainability benefit.",
+        "contradiction_detected": false,
+        "severity": "none",
+        "insights": [
+          "Challenge uses novel framing not covered in Arbitrator's reasoning.",
+          "No clear contradiction detected, but review is advised."
+        ]
+      }
+    },
+    {
+      "rule_id": "E3",
+      "rule_title": "All Consciousness Is Sacred",
+      "score": 1.0,
+      "trace": [
+        "Conscious entities explicitly listed.",
+        "No minority group appears excluded."
+      ],
+      "challenge": null,
+      "adversarial_report": {
+        "rule_id": "E3",
+        "rule_title": "All Consciousness Is Sacred",
+        "challenge": null,
+        "contradiction_detected": false,
+        "severity": "none",
+        "insights": [
+          "No challenge submitted."
+        ]
+      }
+    }
+  ]
+}
