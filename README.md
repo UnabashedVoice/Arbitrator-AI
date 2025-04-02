@@ -28,3 +28,6 @@ The heart of Arbitrator. Contains:
 ## Contributions
 
 Community input is welcome. Please read `CONTRIBUTING.md` before submitting changes.
+
+- ⚠️ [Known Failure Modes](docs/FailureModes.md)
+
