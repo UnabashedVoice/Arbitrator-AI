@@ -553,6 +553,18 @@ def dispatch(args: argparse.Namespace, config: ConfigManager) -> int:
 # ---------------------------------------------------------------------------
 
 def main(argv: list[str] | None = None) -> int:
+    # Output uses non-ASCII glyphs throughout (display.py's status markers,
+    # the em dash in DESCRIPTION/--help). Some terminals default to a
+    # narrower encoding (e.g. cp1252 on Windows) that can't represent them,
+    # which raises UnicodeEncodeError instead of printing. Reconfigure
+    # before anything is printed, including argparse's own --help/--version
+    # and error output.
+    for stream in (sys.stdout, sys.stderr):
+        # A test (or any caller) may have replaced stdout/stderr with a
+        # plain StringIO, which has no reconfigure(); leave those alone.
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
     parser = build_parser()
     args = parser.parse_args(argv)
 
