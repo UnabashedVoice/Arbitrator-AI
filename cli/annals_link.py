@@ -7,7 +7,7 @@ locks its findings as predictions *before* anyone knows how things turn
 out, so the look-back years later has something specific to check.
 
 Annals is found at $ARBITRATOR_ANNALS, or as a sibling folder (the
-workspace layout: Claude/Arbitrator/Arbitrator-imported and Claude/Annals).
+workspace layout: Claude/Arbitrator/Arbitrator and Claude/Annals).
 Nothing here is required to run Arbitrator; without --annals it isn't used.
 """
 
