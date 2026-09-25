@@ -154,6 +154,18 @@ def _add_run_parser(subparsers):
         "--no-pager", action="store_true",
         help="Disable pager even in verbose mode",
     )
+    p.add_argument(
+        "--annals", action="store_true",
+        help="Record this recommendation in the Annals, locking its findings as predictions",
+    )
+    p.add_argument(
+        "--annals-people", metavar="FILE",
+        help="JSON {decision_makers: [...], affected: [...]} for the Annals case",
+    )
+    p.add_argument(
+        "--annals-question", metavar="TEXT",
+        help="The decision under consideration, if not the proposal text",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -384,6 +396,9 @@ def dispatch(args: argparse.Namespace, config: ConfigManager) -> int:
             ethics_only=args.ethics_only,
             output_file=getattr(args, "output", None),
             json_output=getattr(args, "json_output", False),
+            annals=getattr(args, "annals", False),
+            annals_people=getattr(args, "annals_people", None),
+            annals_question=getattr(args, "annals_question", None),
         )
 
     # ── feedback ─────────────────────────────────────────────────────────────

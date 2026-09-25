@@ -37,6 +37,9 @@ def run_command(
     ethics_only: bool = False,
     output_file: Optional[str] = None,
     json_output: bool = False,
+    annals: bool = False,
+    annals_people: Optional[str] = None,
+    annals_question: Optional[str] = None,
 ) -> int:
     """
     Execute the analysis pipeline for a proposal.
@@ -89,6 +92,15 @@ def run_command(
         return 2
 
     result_dict = result.to_dict()
+
+    if annals:
+        from Arbitrator.cli.annals_link import record_in_annals
+        try:
+            entry = record_in_annals(result_dict, config.get("arbitrator_version"),
+                                     people_file=annals_people, question=annals_question)
+            display.success(f"Recorded in the Annals as case {entry['body']['case_id']}")
+        except Exception as e:  # the analysis stands; only the record failed
+            display.warn(f"Not recorded in the Annals: {e}")
 
     # Ethics-only mode
     if ethics_only:
