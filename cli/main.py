@@ -562,8 +562,14 @@ def main(argv: list[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         # A test (or any caller) may have replaced stdout/stderr with a
         # plain StringIO, which has no reconfigure(); leave those alone.
+        # Swallow any other failure too, the same way Actualizer's and
+        # Annals' CLIs do — display is never what should break a run
+        # whose analysis actually succeeded.
         if hasattr(stream, "reconfigure"):
-            stream.reconfigure(encoding="utf-8", errors="replace")
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
 
     parser = build_parser()
     args = parser.parse_args(argv)
