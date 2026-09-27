@@ -131,6 +131,27 @@ def write_channel_output(
     )
 
 
+def write_compendium_consulted(
+    session_id: str,
+    consultation_dict: dict,
+    manifest_id: str,
+    node_id: str = "local",
+) -> AuditEntry:
+    """
+    Log a Compendium consultation: which entries the model chose from the
+    index, why, what it named that doesn't exist, and the selection call's
+    raw output. The disclosed text itself is the corpus's own and is
+    identified by the Compendium version, so only its length is kept.
+    """
+    return AuditEntry(
+        kind=EntryKind.COMPENDIUM_CONSULTED,
+        session_id=session_id,
+        node_id=node_id,
+        related_ids=[manifest_id],
+        payload=consultation_dict,
+    )
+
+
 def write_consequence_map(
     session_id: str,
     consequence_map_dict: dict,

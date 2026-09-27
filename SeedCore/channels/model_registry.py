@@ -78,6 +78,7 @@ from .backend import (
     ModelBackend,
     AnthropicBackend,
     OllamaBackend,
+    LMStudioBackend,
     MockBackend,
     BackendError,
 )
@@ -801,8 +802,18 @@ def _discover_candidates() -> list[ModelBackend]:
     """
     candidates = []
 
-    # Anthropic: probe key availability first (no network call for key check)
     import os
+    # LM Studio: named explicitly, and then it is the only candidate, with no
+    # silent fallback to the mock. A run meant to test a local model must fail
+    # loudly if that model is unreachable, not produce placeholder analysis.
+    lmstudio_model = os.environ.get("ARBITRATOR_LMSTUDIO_MODEL")
+    if lmstudio_model:
+        return [LMStudioBackend(
+            model=lmstudio_model,
+            base_url=os.environ.get("ARBITRATOR_LMSTUDIO_URL", "http://localhost:1234"),
+        )]
+
+    # Anthropic: probe key availability first (no network call for key check)
     if os.environ.get("ANTHROPIC_API_KEY"):
         candidates += [
             AnthropicBackend(model="claude-opus-4-6"),

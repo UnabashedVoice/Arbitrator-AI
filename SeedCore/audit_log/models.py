@@ -63,6 +63,7 @@ class EntryKind(Enum):
     CONTEXT_PARSED = "context_parsed"               # RoutingManifest from Context Parser
     ETHICS_EVALUATED = "ethics_evaluated"           # EthicsEvaluation from Ethics Core
     CHANNEL_OUTPUT = "channel_output"               # Output from a single channel
+    COMPENDIUM_CONSULTED = "compendium_consulted"   # Compendium entries chosen and shown to a channel
     CONSEQUENCE_MAP = "consequence_map"             # ConsequenceMap from Synthesizer
     FEEDBACK_RECEIVED = "feedback_received"         # Feedback submission
     HUMAN_REVIEW = "human_review"                   # Human review decision

@@ -53,7 +53,9 @@ from ..synthesis import Synthesizer, ChannelOutput
 from ..synthesis.channel_output import ChannelStatus
 
 from .bridge import context_to_proposal
-from .channel_stubs import invoke_channel, invoke_channel_with_primary_outputs, is_stub, stub_channels
+from .channel_stubs import (
+    get_channel, invoke_channel, invoke_channel_with_primary_outputs, is_stub, stub_channels,
+)
 from .result import PipelineResult, PipelineStatus
 
 
@@ -79,6 +81,9 @@ class OrchestratorConfig:
                                 "human review required" not "stop everything".
         max_channels:           Maximum number of channels to invoke. None = all.
         arbitrator_version:     Version string written to audit log.
+        use_compendium:         If True, consult the Compendium once per run and
+                                show the chosen entries to the channels that use
+                                it (the ethical adversary). See compendium_link.py.
     """
     audit_log_path: str = "./arbitrator_audit.jsonl"
     node_id: str = "local"
@@ -86,6 +91,7 @@ class OrchestratorConfig:
     continue_after_escalate: bool = True
     max_channels: Optional[int] = None
     arbitrator_version: str = "0.1.0"
+    use_compendium: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -343,6 +349,22 @@ class Orchestrator:
 
             primary_outputs.append(output)
             channel_outputs.append(output)
+
+        # --- Compendium consultation (opt-in), before the channels that use it ---
+        if self._config.use_compendium and "ethical_adversarial" in channels_to_invoke:
+            from .compendium_link import consult
+            record, disclosed = consult(raw_input, get_channel("ethical_adversarial")._backend)
+            result.compendium = record
+            if disclosed:
+                context_dict["compendium_referents"] = disclosed
+            if record.get("error"):
+                result.warnings.append(f"[compendium] Consultation failed: {record['error']}")
+            self._audit.append(writers.write_compendium_consulted(
+                session_id=session_id,
+                consultation_dict=record,
+                manifest_id=manifest.manifest_id,
+                node_id=self._config.node_id,
+            ))
 
         # --- Phase B: secondary channels (with primary outputs injected) ---
         for channel_name in channels_to_invoke:

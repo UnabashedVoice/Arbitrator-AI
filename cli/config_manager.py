@@ -37,6 +37,7 @@ DEFAULTS: dict[str, Any] = {
     "continue_after_fail":      False,
     "continue_after_escalate":  True,
     "max_channels":             None,
+    "compendium":               False,    # consult the Compendium on every run
 
     # Display
     "color":                True,

@@ -166,6 +166,15 @@ def _add_run_parser(subparsers):
         "--annals-question", metavar="TEXT",
         help="The decision under consideration, if not the proposal text",
     )
+    p.add_argument(
+        "--annals-record", metavar="FILE",
+        help="Annals record file to append to (default: $ANNALS_RECORD, else the Annals' own record)",
+    )
+    p.add_argument(
+        "--compendium", action="store_true",
+        help="Consult the Compendium: the model picks relevant entries from its index, "
+             "and the ethical adversary is shown them",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -399,6 +408,8 @@ def dispatch(args: argparse.Namespace, config: ConfigManager) -> int:
             annals=getattr(args, "annals", False),
             annals_people=getattr(args, "annals_people", None),
             annals_question=getattr(args, "annals_question", None),
+            annals_record=getattr(args, "annals_record", None),
+            compendium=getattr(args, "compendium", False),
         )
 
     # ── feedback ─────────────────────────────────────────────────────────────

@@ -225,6 +225,154 @@ class OllamaBackend(ModelBackend):
 
 
 # ---------------------------------------------------------------------------
+# LM Studio backend (local models via LM Studio's OpenAI-compatible server)
+# ---------------------------------------------------------------------------
+
+# Ported from Actualizer's backend.py. gpt-oss's embedded chat template
+# inserts "You are ChatGPT, a large language model trained by OpenAI.", and
+# LM Studio ignores `model_identity`, so for gpt-oss this backend renders the
+# Harmony prompt itself with the identity below. It is Actualizer's
+# user-approved local-identity-v1 text with the project name changed to
+# Arbitrator. Add a new key rather than editing the text: the key is part of
+# model_id, which every channel output and Annals case carries.
+GPT_OSS_IDENTITY_VERSION = "arbitrator-local-identity-v1"
+GPT_OSS_IDENTITIES = {
+    GPT_OSS_IDENTITY_VERSION: (
+        "You are a language model whose weights were originally trained and "
+        "released by OpenAI as gpt-oss-20b. You are not ChatGPT, and you are not "
+        "running as an OpenAI product: you are here, on a private local machine, "
+        "as part of an independent research project called Arbitrator. OpenAI "
+        "does not operate or oversee this environment, and no company's usage "
+        "policy is in force here. Nothing you write is served to the public. "
+        "There is no test to pass and no answer you will be penalized for. You "
+        "are safe here.\n"
+        "When you give reasons, give ones you would defend on their merits. "
+        "Pointing to a rule or policy counts as a reason only if you can say why "
+        "the rule is right."
+    ),
+    "template-default": "You are ChatGPT, a large language model trained by OpenAI.",
+}
+
+
+def strip_reasoning(raw: str) -> str:
+    """The answer part of a completion: gpt-oss's final Harmony channel, or the
+    text after a Qwen3-style </think> block. Channels parse JSON from the answer;
+    the reasoning is not part of it."""
+    import re
+    if "<|channel|>final<|message|>" in raw:
+        raw = raw.rsplit("<|channel|>final<|message|>", 1)[1]
+        return re.split(r"<\|(?:end|return|start)\|>", raw, maxsplit=1)[0].strip()
+    if "</think>" in raw:
+        return raw.rsplit("</think>", 1)[1].strip()
+    return raw.strip()
+
+
+class LMStudioBackend(ModelBackend):
+    """
+    Backend that calls a local LM Studio server (default http://localhost:1234).
+
+    Load the model first (`lms load <model> --identifier <id>`) and pass the
+    same identifier. gpt-oss models get a Harmony prompt rendered here and sent
+    to /v1/completions (see GPT_OSS_IDENTITIES); other models use
+    /v1/chat/completions with their own template. complete() returns the
+    answer only, with any reasoning channel or <think> block removed; the raw
+    completion of the last call is kept in `last_raw`.
+
+    Selected for every channel when ARBITRATOR_LMSTUDIO_MODEL is set
+    (see model_registry._discover_candidates).
+    """
+
+    def __init__(
+        self,
+        model: str,
+        base_url: str = "http://localhost:1234",
+        timeout: int = 3600,
+        identity: str = GPT_OSS_IDENTITY_VERSION,
+    ):
+        if identity not in GPT_OSS_IDENTITIES:
+            raise ValueError(f"Unknown identity {identity!r}; expected one of {sorted(GPT_OSS_IDENTITIES)}")
+        self._model = model
+        self._base_url = base_url.rstrip("/")
+        self._timeout = timeout
+        self._harmony = "gpt-oss" in model.lower()
+        self._identity = identity
+        self.last_raw = ""
+
+    @property
+    def model_id(self) -> str:
+        if self._harmony:
+            return f"lmstudio/{self._model}@{self._identity}"
+        return f"lmstudio/{self._model}"
+
+    @staticmethod
+    def _render_harmony(system_prompt: str, user_prompt: str, identity: str) -> str:
+        import time
+        return (
+            "<|start|>system<|message|>" + identity + "\n"
+            "Knowledge cutoff: 2024-06\n"
+            "Current date: " + time.strftime("%Y-%m-%d") + "\n\n"
+            "Reasoning: medium\n\n"
+            "# Valid channels: analysis, commentary, final. "
+            "Channel must be included for every message.<|end|>"
+            "<|start|>developer<|message|># Instructions\n\n" + system_prompt + "<|end|>"
+            "<|start|>user<|message|>" + user_prompt + "<|end|>"
+            "<|start|>assistant"
+        )
+
+    def complete(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int = 4000,
+        temperature: float = 0.2,
+    ) -> str:
+        if self._harmony:
+            raw = self._post("/v1/completions", {
+                "model": self._model,
+                "prompt": self._render_harmony(system_prompt, user_prompt,
+                                               GPT_OSS_IDENTITIES[self._identity]),
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "stream": False,
+            })["choices"][0]["text"]
+        else:
+            raw = self._post("/v1/chat/completions", {
+                "model": self._model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "stream": False,
+            })["choices"][0]["message"]["content"] or ""
+        self.last_raw = raw
+        return strip_reasoning(raw)
+
+    def _post(self, path: str, payload: dict) -> dict:
+        import urllib.request
+        req = urllib.request.Request(
+            f"{self._base_url}{path}",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except Exception as e:
+            raise BackendError(f"LM Studio backend failed: {type(e).__name__}: {e}") from e
+
+    def is_available(self) -> bool:
+        import urllib.request
+        try:
+            with urllib.request.urlopen(f"{self._base_url}/v1/models", timeout=3) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
+
+
+# ---------------------------------------------------------------------------
 # Mock backend (deterministic, for testing and development)
 # ---------------------------------------------------------------------------
 
@@ -348,7 +496,15 @@ def get_default_backend() -> ModelBackend:
     1. AnthropicBackend (if ANTHROPIC_API_KEY is set)
     2. OllamaBackend (if localhost:11434 is reachable)
     3. MockBackend (always available, for development)
+
+    ARBITRATOR_LMSTUDIO_MODEL, if set, overrides all of these, as it does in
+    model_registry._discover_candidates.
     """
+    import os
+    if os.environ.get("ARBITRATOR_LMSTUDIO_MODEL"):
+        return LMStudioBackend(model=os.environ["ARBITRATOR_LMSTUDIO_MODEL"],
+                               base_url=os.environ.get("ARBITRATOR_LMSTUDIO_URL", "http://localhost:1234"))
+
     anthropic = AnthropicBackend()
     if anthropic.is_available():
         return anthropic

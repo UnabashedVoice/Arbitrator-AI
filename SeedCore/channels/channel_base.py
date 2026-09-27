@@ -129,6 +129,11 @@ class BaseChannel(ABC):
     def domain_tags(self) -> list[str]:
         """Tags applied to all findings from this channel."""
 
+    # Channels shown Compendium entries when a run consults it
+    # (context_dict["compendium_referents"]). Only the ethical adversary works
+    # from philosophy; the empirical channels are left as they were.
+    uses_compendium: bool = False
+
     # ---------------------------------------------------------------------------
     # Prompt assembly
     # ---------------------------------------------------------------------------
@@ -178,6 +183,10 @@ PARSED CONTEXT:
 
         if primary_outputs:
             base += "\n\n" + self._build_primary_outputs_section(primary_outputs)
+
+        referents = context_dict.get("compendium_referents")
+        if referents and self.uses_compendium:
+            base += "\n\n" + referents
 
         base += f"""
 

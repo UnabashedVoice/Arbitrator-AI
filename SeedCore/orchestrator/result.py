@@ -66,6 +66,7 @@ class PipelineResult:
     manifest: Optional[dict] = None
     ethics_evaluation: Optional[dict] = None
     consequence_map: Optional[dict] = None
+    compendium: Optional[dict] = None   # the Compendium consultation, if --compendium was used
 
     ethics_verdict: Optional[str] = None
     synthesis_verdict: Optional[str] = None
@@ -135,6 +136,7 @@ class PipelineResult:
             "manifest": self.manifest,
             "ethics_evaluation": self.ethics_evaluation,
             "consequence_map": self.consequence_map,
+            "compendium": self.compendium,
         }
 
     def to_json(self, indent: int = 2) -> str:

@@ -40,6 +40,8 @@ def run_command(
     annals: bool = False,
     annals_people: Optional[str] = None,
     annals_question: Optional[str] = None,
+    annals_record: Optional[str] = None,
+    compendium: bool = False,
 ) -> int:
     """
     Execute the analysis pipeline for a proposal.
@@ -70,6 +72,7 @@ def run_command(
         continue_after_fail=config.get("continue_after_fail"),
         continue_after_escalate=config.get("continue_after_escalate"),
         arbitrator_version=config.get("arbitrator_version"),
+        use_compendium=compendium or bool(config.get("compendium")),
     )
 
     try:
@@ -93,11 +96,15 @@ def run_command(
 
     result_dict = result.to_dict()
 
+    if result_dict.get("compendium"):
+        display.status(f"Compendium: {result_dict['compendium']['identity']}")
+
     if annals:
         from Arbitrator.cli.annals_link import record_in_annals
         try:
             entry = record_in_annals(result_dict, config.get("arbitrator_version"),
-                                     people_file=annals_people, question=annals_question)
+                                     people_file=annals_people, question=annals_question,
+                                     record_path=annals_record)
             display.success(f"Recorded in the Annals as case {entry['body']['case_id']}")
         except Exception as e:  # the analysis stands; only the record failed
             display.warn(f"Not recorded in the Annals: {e}")

@@ -20,6 +20,8 @@ from .channel_base import BaseChannel
 
 class EthicalAdversarialChannel(BaseChannel):
 
+    uses_compendium = True
+
     @property
     def channel_name(self) -> str:
         return "ethical_adversarial"
