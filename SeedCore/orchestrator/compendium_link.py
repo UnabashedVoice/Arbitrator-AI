@@ -40,7 +40,8 @@ def load_compendium():
     raise FileNotFoundError("Compendium not found: set COMPENDIUM_ROOT to the Compendium folder")
 
 
-def consult(proposal: str, backend, max_entries: int = 3, budget_chars: int = 6000) -> tuple[dict, str]:
+def consult(proposal: str, backend, max_entries: int = 5, budget_chars: "int | None" = None,
+            max_sections: "int | None" = None) -> tuple[dict, str]:
     """
     Run one consultation with `backend`. Returns (record, disclosed text).
 
@@ -56,13 +57,31 @@ def consult(proposal: str, backend, max_entries: int = 3, budget_chars: int = 60
         return {"version": "unavailable", "error": err,
                 "identity": f"not consulted (Compendium unavailable: {err})"}, ""
 
+    import compendium_access  # importable once load_compendium() has run
+    if budget_chars is None:  # scale to the backend's loaded context window
+        budget_chars = compendium_access.budget_for_context(getattr(backend, "context_length", 0))
+    if max_sections is None:  # the model may ask for any of an entry's sections
+        max_sections = len(compendium_access.SECTIONS)
+
+    raws: list[str] = []
+    finish: list = []
+
     def complete(system: str, user: str) -> str:
         # Room for a reasoning model's thinking before the short JSON answer.
-        return backend.complete(system, user, max_tokens=3000, temperature=0.2)
+        answer = backend.complete(system, user, max_tokens=4000, temperature=0.2)
+        raws.append(getattr(backend, "last_raw", None) or answer)
+        finish.append(getattr(backend, "last_finish_reason", None))
+        return answer
 
-    c = comp.consult(proposal, complete, max_entries=max_entries, budget_chars=budget_chars)
+    c = comp.consult(proposal, complete, max_entries=max_entries, budget_chars=budget_chars,
+                     max_sections=max_sections)
     record = c.to_dict()
     record["identity"] = c.identity()
     record["model_id"] = getattr(backend, "model_id", "unknown")
     record["stale_build"] = comp.stale
+    # The selecting model's complete output, reasoning included, for the run's thought log.
+    from ..channels.backend import split_reasoning
+    record["raw_completions"] = raws
+    record["reasoning"] = [split_reasoning(r)[0] for r in raws]
+    record["finish_reasons"] = finish
     return record, c.text

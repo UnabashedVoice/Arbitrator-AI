@@ -25,7 +25,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from .backend import ModelBackend, BackendError, get_default_backend
+from .backend import ModelBackend, BackendError, get_default_backend, split_reasoning
 from .response_parser import RESPONSE_SCHEMA, parse_channel_response
 from ..synthesis.channel_output import ChannelOutput, ChannelStatus
 
@@ -56,7 +56,8 @@ _OUTPUT_INSTRUCTIONS = (
     "- confidence: How confident you are in this analysis [0.0 = complete uncertainty, 1.0 = certainty]\n"
     "- findings: 3-8 distinct findings; each must have a clear summary and direction\n"
     "- finding_id: Deterministic string in format '{channel_name}_{index:02d}' — e.g. 'economic_00',\n"
-    "  'ecological_03'. Start numbering at 00. These IDs are used for cross-channel referencing.\n"
+    "  'ecological_03'. Start numbering at 00. Arbitrator renumbers your findings to this format\n"
+    "  in the order you give them, so use your own channel name, never another channel's.\n"
     "- magnitude: How significant is this finding [0.0 = negligible, 1.0 = civilizational]\n"
     "- references_finding_id: List of finding_ids from PRIMARY CHANNEL outputs that this finding\n"
     "  directly responds to, builds on, or challenges. Empty array [] if this finding stands alone.\n"
@@ -66,7 +67,13 @@ _OUTPUT_INSTRUCTIONS = (
     "- uncertainty_notes: Document what you cannot assess and why — honesty about limits matters\n"
     "- adversarial_challenges: Only populate for the ethical_adversarial channel. ALL OTHER CHANNELS\n"
     "  must return an empty array [] for this field — do not omit it, and do not populate it with\n"
-    "  analysis that belongs in findings."
+    "  analysis that belongs in findings.\n"
+    "- escalation_request: Set requested to true only if the decision turns on something analysis\n"
+    "  cannot settle: a value trade-off the affected parties themselves must weigh, consent that has\n"
+    "  to be sought, or a fact only the decision-makers can supply. Requesting review is not a way to\n"
+    "  avoid a hard call. Your findings and scores must still give your best judgment, and if you\n"
+    "  request review you must say exactly what a human has to decide (what_to_decide). Otherwise\n"
+    "  return {\"requested\": false, \"reason\": \"\", \"what_to_decide\": \"\"}."
 )
 
 
@@ -102,7 +109,10 @@ class BaseChannel(ABC):
         self._backend = backend or get_default_backend()
         self._max_retries = max_retries
         self._retry_delay = retry_delay_s
-        self._max_tokens = max_tokens
+        # ARBITRATOR_CHANNEL_MAX_TOKENS raises the answer budget for models that
+        # reason at length before answering (gpt-oss at high reasoning effort).
+        import os
+        self._max_tokens = int(os.environ.get("ARBITRATOR_CHANNEL_MAX_TOKENS", max_tokens))
         self._temperature = temperature
 
     # ---------------------------------------------------------------------------
@@ -252,12 +262,14 @@ Return only the JSON object."""
     # Invocation
     # ---------------------------------------------------------------------------
 
-    def _run_with_prompt(self, system_prompt: str, user_prompt: str) -> ChannelOutput:
+    def _run_with_prompt(self, system_prompt: str, user_prompt: str,
+                         known_ids: Optional[set] = None) -> ChannelOutput:
         """
         Internal: send prompts to backend with retry logic. Always returns
         a ChannelOutput, never raises.
         """
         last_error = None
+        last_raw = None
         for attempt in range(self._max_retries + 1):
             start = time.monotonic()
             try:
@@ -274,7 +286,15 @@ Return only the JSON object."""
                     channel_name=self.channel_name,
                     model_id=self._backend.model_id,
                     processing_time_ms=elapsed_ms,
+                    known_ids=known_ids,
                 )
+                # Keep the model's complete output, reasoning included: the parsed
+                # JSON is its conclusion, not how it got there.
+                raw = getattr(self._backend, "last_raw", None) or response
+                output.raw_response = raw
+                output.reasoning = split_reasoning(raw)[0]
+                output.finish_reason = getattr(self._backend, "last_finish_reason", None)
+                last_raw = raw
 
                 if output.status == ChannelStatus.SUCCESS:
                     return output
@@ -294,6 +314,8 @@ Return only the JSON object."""
             error_message=f"Channel failed after {self._max_retries + 1} attempt(s). "
                          f"Last error: {last_error}",
             model_id=self._backend.model_id,
+            raw_response=last_raw,
+            reasoning=split_reasoning(last_raw)[0] if last_raw else None,
         )
 
     def analyze(self, raw_input: str, context_dict: dict) -> ChannelOutput:
@@ -340,7 +362,8 @@ Return only the JSON object."""
         user_prompt = self._build_user_prompt(
             raw_input, context_dict, primary_outputs=primary_outputs
         )
-        return self._run_with_prompt(system_prompt, user_prompt)
+        shown = {f.finding_id for o in primary_outputs if o.succeeded for f in o.findings}
+        return self._run_with_prompt(system_prompt, user_prompt, known_ids=shown)
 
     def __call__(self, raw_input: str, context_dict: dict) -> ChannelOutput:
         """Make the channel directly callable (for registry registration)."""

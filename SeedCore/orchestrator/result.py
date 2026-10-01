@@ -67,6 +67,12 @@ class PipelineResult:
     ethics_evaluation: Optional[dict] = None
     consequence_map: Optional[dict] = None
     compendium: Optional[dict] = None   # the Compendium consultation, if --compendium was used
+    gate_mode: str = "prescreen"                     # "prescreen" | "analysis"
+    prescreen_verdict: Optional[str] = None          # analysis gate: the advisory pre-screen verdict
+    post_screen_evaluation: Optional[dict] = None    # analysis gate: Ethics Core on the channels' scores
+    escalation: Optional[dict] = None                # what triggered human review, if escalated
+    brief: Optional[dict] = None                     # the decision brief: brief, error, attempts, model_id
+    review_requests: list = field(default_factory=list)  # every channel's request for review, material or not
 
     ethics_verdict: Optional[str] = None
     synthesis_verdict: Optional[str] = None
@@ -137,6 +143,12 @@ class PipelineResult:
             "ethics_evaluation": self.ethics_evaluation,
             "consequence_map": self.consequence_map,
             "compendium": self.compendium,
+            "gate_mode": self.gate_mode,
+            "prescreen_verdict": self.prescreen_verdict,
+            "post_screen_evaluation": self.post_screen_evaluation,
+            "escalation": self.escalation,
+            "brief": self.brief,
+            "review_requests": self.review_requests,
         }
 
     def to_json(self, indent: int = 2) -> str:

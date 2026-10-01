@@ -250,6 +250,11 @@ def render_pipeline_result(result: dict, verbose: bool = False) -> str:
     if cm:
         lines.extend(_render_consequence_map(cm, verbose=verbose))
 
+    if result.get("escalation"):
+        lines.extend(_render_escalation(result["escalation"]))
+    if result.get("brief"):
+        lines.extend(_render_brief(result["brief"]))
+
     lines.append("")
     lines.append(rule())
     lines.append(dim(f"  Map ID: {cm.get('map_id', 'N/A') if cm else 'N/A'}"))
@@ -259,6 +264,54 @@ def render_pipeline_result(result: dict, verbose: bool = False) -> str:
     lines.append("")
 
     return "\n".join(lines)
+
+
+def _render_escalation(esc: dict) -> list[str]:
+    """What triggered human review."""
+    lines = ["", section("ESCALATED FOR HUMAN REVIEW")]
+    for t in esc.get("triggers", []):
+        lines.append(_wrap(f"Trigger [{t.get('source')}]: {t.get('detail')}", indent=2))
+    return lines
+
+
+def _render_brief(written: dict) -> list[str]:
+    """The decision brief: how to resolve the decision, with the reasons for each option."""
+    lines = ["", section("DECISION BRIEF")]
+    brief = written.get("brief")
+    if not brief:
+        lines.append(_wrap(f"{yellow('No decision brief')}: {written.get('error') or 'not produced'}", indent=2))
+        return lines
+    lines.append(_wrap(f"Judgment calls: {brief['why_human_judgment']}", indent=2))
+    lines.append("")
+    lines.append(bold("  To decide:"))
+    for q in brief.get("decision_questions", []):
+        lines.append(_wrap(f"- {q}", indent=4))
+    lean = brief.get("provisional_lean") or {}
+    aside = {a.get("option"): a.get("because") for a in brief.get("set_aside", []) if isinstance(a, dict)}
+    lines.append("")
+    lines.append(bold("  Options:"))
+    for o in brief.get("options", []):
+        rev = {True: "reversible", False: "NOT reversible"}.get(o.get("reversible"), "reversibility unknown")
+        mark = green(" <- provisional lean") if o["id"] == lean.get("option") else ""
+        lines.append(_wrap(f"[{o['id']}] {o['label']} ({rev}){mark}", indent=4))
+        lines.append(_wrap(f"Consequences: {o.get('consequences', '')} Cost borne by: "
+                           f"{o.get('who_bears_cost', 'unstated')}.", indent=6))
+        lines.append(_wrap(f"For: {o.get('case_for', '')}", indent=6))
+        lines.append(_wrap(f"Against: {o.get('case_against', '')}", indent=6))
+        if o["id"] in aside:
+            lines.append(_wrap(f"Set aside because: {aside[o['id']]}", indent=6))
+    lines.append("")
+    lines.append(_wrap(f"{bold('Provisional lean')}: {lean.get('option')} (confidence {lean.get('confidence')})",
+                       indent=2))
+    lines.append(_wrap(f"Reasoning: {lean.get('reasoning')}", indent=4))
+    lines.append(_wrap(f"Would change if: {lean.get('would_change_if')}", indent=4))
+    for u in brief.get("uncertainties", []):
+        lines.append(_wrap(f"Uncertain: {u.get('what')}; would resolve it: {u.get('would_resolve_it')}", indent=2))
+    review = brief.get("review") or {}
+    if review:
+        verdict = "needs human sign-off" if review.get("needed") else "does not need human sign-off"
+        lines.append(_wrap(f"{bold('Brief-writer')}: this decision {verdict}. {review.get('why', '')}", indent=2))
+    return lines
 
 
 def _render_consequence_map(cm: dict, verbose: bool = False) -> list[str]:

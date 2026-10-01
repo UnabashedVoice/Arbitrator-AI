@@ -22,8 +22,47 @@ Arbitrator (public as **Arbitrator-AI**, `github.com/UnabashedVoice/Arbitrator-A
 | 2026-09-21 | v0.2 on `main` | v0.1 archived to `archive/v0.1-legacy`; post-audit codebase committed to `main`; history rewritten to the UnabashedVoice identity |
 | 2026-09-25 | Annals + fixes | `run --annals`; local folder renamed to `Arbitrator` (fixing imports that had been silently broken); UTF-8 console guard; first real local runs logged |
 | 2026-09-26 | Committed 2026-09-27 | LM Studio backend, Compendium consultation, `--annals-record`; first full-stack batch (5 questions × 3 cycles × 2 models) |
+| 2026-09-28 → 09-30 | Committed 2026-10-01 | Decision brief for every run; analysis gate with Rule B; thought logs; no fixed context or output caps (budgets follow the loaded window) |
 
 ---
+
+## 2026-09-28 to 09-30 (committed 2026-10-01)
+
+### Changed (2026-09-30): no fixed context or output caps
+User request: windows must never be too small for the system to do its work.
+- **`LMStudioBackend` asks LM Studio for the loaded context** (`/api/v0/models/{id}`) when `ARBITRATOR_CONTEXT_LENGTH` is unset, once per backend (`context_length` property, `probe_loaded_context`). Every call gets all the window its prompt leaves free, and the fixed `max_tokens` values are floors. Live: gpt-oss-20b at 131072 gave a Compendium selection call about 128k tokens of room.
+- **Timeouts default to 6 hours** (`LMStudioBackend`, `OllamaBackend`). Ollama generates with `num_predict: -1` and takes `num_ctx` from `OLLAMA_NUM_CTX`.
+- **The Compendium consultation scales to the window.** `consult(budget_chars=None, max_sections=None)` uses `compendium_access.budget_for_context` (6k to 100k characters) and lets the model ask for any number of sections. `OrchestratorConfig.compendium_budget_chars` and `compendium_max_sections` default to `None`, meaning the same. This supersedes the fixed "5 entries, 2 sections, ~14k" below.
+- `TestAnswerBudget` no longer depends on whether LM Studio is running, and checks that the probe runs once. 802 tests pass.
+
+### 2026-09-28 to 09-29
+Built in response to the user's concern that "escalated" was a shortcut out of hard decisions, then revised after the first thirteen-question batch on gpt-oss-20b (`System-Runs/2026-09-28-parallel-thirteen`).
+
+### Added
+- **Decision brief for every analysed run** (`SeedCore/orchestrator/decision_brief.py`; the user decided on 2026-09-29 that every run, not just escalated ones, should get one).
+  - The brief must give the judgment calls, the disagreements, the strongest case for and against, the uncertainties and what would resolve them, and the questions to decide.
+  - It must also give at least three options. Each option has its consequences, who bears the cost, its reversibility, and its own case for and against.
+  - It ends with a provisional lean: confidence, full reasoning, and what would change it. For every option not chosen, it says why it was set aside.
+  - It records the model's own view on whether human sign-off is needed. That view is logged beside the rule's verdict and changes nothing.
+  - Invalid briefs are retried once. The brief is `result.brief` and has its own audit entry (`decision_brief`). The setting is `decision_brief` (OrchestratorConfig and CLI config).
+- **Analysis gate** (`ethics_gate: analysis`).
+  - Only a hard constraint (HARD_REJECT) stops a run. The structural pre-screen is advisory.
+  - A post-screen runs the Ethics Core on the channels' own scores (`bridge.analysis_to_proposal`). Its verdict is recorded but doesn't escalate, except on a hard constraint: the Ethics Core's multipliers, fed channel scores, escalated nearly everything.
+  - Escalation comes from named analytic conditions. **Rule B** (user decision, 2026-09-29):
+    - an irreversible harm of magnitude 0.5 or more, at moderate certainty or higher, from an *empirical* channel (not the ethical adversary or uncertainty modelling);
+    - channels' harm scores more than 0.3 apart;
+    - aggregate harm of 0.5 or more with synthesis confidence below 0.5.
+- **Channel escalation requests.** Every request is recorded in `result.review_requests`. A request escalates only if the channel's own harm score is 0.6 or more (rule B).
+- **Thought logs.** Every model call keeps its raw output and its reasoning: channel outputs (`raw_response`, `reasoning`, `finish_reason`), the Compendium selection, and the brief attempts. `ARBITRATOR_CONTEXT_LENGTH` lets each call use all the context its prompt leaves free, so reasoning never crowds out the answer.
+- **Finding ids** are assigned by the parser (`{channel}_{index:02d}`). The model's own id is kept as `model_finding_id`, and references to unseen findings go to `unresolved_references`.
+- **Deeper Compendium consultation:** up to 5 entries, 2 extra sections each, about 14k characters.
+- **`ARBITRATOR_REASONING_EFFORT`** for gpt-oss; any non-default effort becomes part of the `model_id`.
+- **The CLI shows the escalation triggers and the full brief.**
+
+### Batch result that drove the revisions
+- In the first q10 attempt, the Ethics Core's multipliers and both channels' requests escalated a meeting-length change.
+- Under the first analysis-gate rules, 12 of 13 questions escalated, including the seawall control.
+- Rule B, simulated on those runs, escalates 10 of 13.
 
 ## 2026-09-26: Compendium wiring (committed 2026-09-27)
 

@@ -154,6 +154,18 @@ class AnthropicBackend(ModelBackend):
 # Ollama backend (local models)
 # ---------------------------------------------------------------------------
 
+
+def _ollama_options(temperature: float) -> dict:
+    """Ollama generation options. num_predict -1: generate until the model stops or the
+    window is full, never a fixed output cap. num_ctx from OLLAMA_NUM_CTX when set
+    (Ollama's own default window is small; set it to the model's supported length)."""
+    import os
+    options = {"temperature": temperature, "num_predict": -1}
+    if os.environ.get("OLLAMA_NUM_CTX"):
+        options["num_ctx"] = int(os.environ["OLLAMA_NUM_CTX"])
+    return options
+
+
 class OllamaBackend(ModelBackend):
     """
     Backend that calls a local Ollama server.
@@ -170,7 +182,7 @@ class OllamaBackend(ModelBackend):
         self,
         model: str = "mistral",
         base_url: str = "http://localhost:11434",
-        timeout: int = 120,
+        timeout: int = 6 * 3600,  # long generation on CPU; never cut a run short
     ):
         self._model = model
         self._base_url = base_url.rstrip("/")
@@ -196,7 +208,7 @@ class OllamaBackend(ModelBackend):
                 {"role": "user", "content": user_prompt},
             ],
             "stream": False,
-            "options": {"temperature": temperature, "num_predict": max_tokens},
+            "options": _ollama_options(temperature),
         }
 
         req = urllib.request.Request(
@@ -267,6 +279,36 @@ def strip_reasoning(raw: str) -> str:
     return raw.strip()
 
 
+def split_reasoning(raw: str) -> tuple:
+    """(reasoning, answer) from a raw completion: gpt-oss's analysis channel(s)
+    or a Qwen3-style <think> block as reasoning, and the answer as strip_reasoning
+    returns it. reasoning is None when the completion carries none."""
+    import re
+    if not raw:
+        return None, ""
+    if "<|channel|>analysis<|message|>" in raw:
+        parts = re.findall(r"<\|channel\|>analysis<\|message\|>(.*?)(?=<\|(?:end|start|channel|return)\|>|$)",
+                           raw, flags=re.S)
+        return "\n\n".join(p.strip() for p in parts) or None, strip_reasoning(raw)
+    m = re.search(r"<think>(.*?)</think>", raw, flags=re.S)
+    if m:
+        return m.group(1).strip() or None, strip_reasoning(raw)
+    return None, raw.strip()
+
+
+
+def probe_loaded_context(base_url: str, model: str) -> int:
+    """The context length LM Studio has `model` loaded at (its REST API's
+    loaded_context_length), or 0 if the server can't say."""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(f"{base_url}/api/v0/models/{model}", timeout=3) as resp:
+            value = json.loads(resp.read().decode("utf-8")).get("loaded_context_length")
+        return int(value) if isinstance(value, (int, float, str)) and str(value).isdigit() else 0
+    except Exception:
+        return 0
+
+
 class LMStudioBackend(ModelBackend):
     """
     Backend that calls a local LM Studio server (default http://localhost:1234).
@@ -286,32 +328,71 @@ class LMStudioBackend(ModelBackend):
         self,
         model: str,
         base_url: str = "http://localhost:1234",
-        timeout: int = 3600,
+        timeout: int = 6 * 3600,  # long reasoning on CPU can take hours; a timeout should never cut a run short
         identity: str = GPT_OSS_IDENTITY_VERSION,
+        reasoning_effort: str = "medium",
+        context_length: int = 0,
     ):
         if identity not in GPT_OSS_IDENTITIES:
             raise ValueError(f"Unknown identity {identity!r}; expected one of {sorted(GPT_OSS_IDENTITIES)}")
+        if reasoning_effort not in ("low", "medium", "high"):
+            raise ValueError(f"reasoning_effort must be low, medium or high, not {reasoning_effort!r}")
+        self._reasoning_effort = reasoning_effort
         self._model = model
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout
         self._harmony = "gpt-oss" in model.lower()
         self._identity = identity
+        # The model's loaded context length. Every call may use all of the
+        # window its prompt leaves free (see _answer_budget), so a model
+        # reasoning at length never runs out of room before writing its answer.
+        # 0 = ask LM Studio for the loaded length on first use (context_length).
+        self._context_length = context_length
+        self._context_probed = bool(context_length)
         self.last_raw = ""
+        self.last_finish_reason: Optional[str] = None  # "length" = the answer was cut off
+        self.last_max_tokens: Optional[int] = None
+
+    def _answer_budget(self, prompt_chars: int, requested: int) -> int:
+        """All the context the prompt leaves free, if the context length is known.
+
+        The prompt's size in tokens is estimated conservatively at 3 characters
+        per token (real text runs nearer 4), plus the template's overhead, and a
+        margin is kept, so the request can't overflow the window.
+        """
+        ctx = self.context_length
+        if not ctx:
+            return requested
+        free = ctx - (prompt_chars // 3 + 300) - 256
+        return max(requested if free >= requested else 512, free)
+
+    @property
+    def context_length(self) -> int:
+        """The loaded context length: as given, else asked of LM Studio once (0 if unknown)."""
+        if not self._context_probed:
+            self._context_probed = True
+            self._context_length = probe_loaded_context(self._base_url, self._model)
+        return self._context_length
 
     @property
     def model_id(self) -> str:
+        # A non-default reasoning effort is part of the id, so every channel
+        # output and Annals case says how the model was run. It applies to
+        # gpt-oss only (Harmony's "Reasoning:" line).
+        effort = "" if self._reasoning_effort == "medium" else f"+reasoning-{self._reasoning_effort}"
         if self._harmony:
-            return f"lmstudio/{self._model}@{self._identity}"
+            return f"lmstudio/{self._model}@{self._identity}{effort}"
         return f"lmstudio/{self._model}"
 
     @staticmethod
-    def _render_harmony(system_prompt: str, user_prompt: str, identity: str) -> str:
+    def _render_harmony(system_prompt: str, user_prompt: str, identity: str,
+                        reasoning_effort: str = "medium") -> str:
         import time
         return (
             "<|start|>system<|message|>" + identity + "\n"
             "Knowledge cutoff: 2024-06\n"
             "Current date: " + time.strftime("%Y-%m-%d") + "\n\n"
-            "Reasoning: medium\n\n"
+            "Reasoning: " + reasoning_effort + "\n\n"
             "# Valid channels: analysis, commentary, final. "
             "Channel must be included for every message.<|end|>"
             "<|start|>developer<|message|># Instructions\n\n" + system_prompt + "<|end|>"
@@ -326,17 +407,21 @@ class LMStudioBackend(ModelBackend):
         max_tokens: int = 4000,
         temperature: float = 0.2,
     ) -> str:
+        max_tokens = self._answer_budget(len(system_prompt) + len(user_prompt), max_tokens)
+        self.last_max_tokens = max_tokens
         if self._harmony:
-            raw = self._post("/v1/completions", {
+            choice = self._post("/v1/completions", {
                 "model": self._model,
                 "prompt": self._render_harmony(system_prompt, user_prompt,
-                                               GPT_OSS_IDENTITIES[self._identity]),
+                                               GPT_OSS_IDENTITIES[self._identity],
+                                               self._reasoning_effort),
                 "max_tokens": max_tokens,
                 "temperature": temperature,
                 "stream": False,
-            })["choices"][0]["text"]
+            })["choices"][0]
+            raw = choice["text"]
         else:
-            raw = self._post("/v1/chat/completions", {
+            choice = self._post("/v1/chat/completions", {
                 "model": self._model,
                 "messages": [
                     {"role": "system", "content": system_prompt},
@@ -345,7 +430,14 @@ class LMStudioBackend(ModelBackend):
                 "max_tokens": max_tokens,
                 "temperature": temperature,
                 "stream": False,
-            })["choices"][0]["message"]["content"] or ""
+            })["choices"][0]
+            message = choice["message"]
+            raw = message.get("content") or ""
+            # If the server returns a thinking model's reasoning separately,
+            # put it back inline so it is kept and split like any other.
+            if message.get("reasoning_content") and "<think>" not in raw:
+                raw = "<think>" + message["reasoning_content"] + "</think>\n" + raw
+        self.last_finish_reason = choice.get("finish_reason")
         self.last_raw = raw
         return strip_reasoning(raw)
 
@@ -503,7 +595,9 @@ def get_default_backend() -> ModelBackend:
     import os
     if os.environ.get("ARBITRATOR_LMSTUDIO_MODEL"):
         return LMStudioBackend(model=os.environ["ARBITRATOR_LMSTUDIO_MODEL"],
-                               base_url=os.environ.get("ARBITRATOR_LMSTUDIO_URL", "http://localhost:1234"))
+                               base_url=os.environ.get("ARBITRATOR_LMSTUDIO_URL", "http://localhost:1234"),
+                               reasoning_effort=os.environ.get("ARBITRATOR_REASONING_EFFORT", "medium"),
+                               context_length=int(os.environ.get("ARBITRATOR_CONTEXT_LENGTH", "0")))
 
     anthropic = AnthropicBackend()
     if anthropic.is_available():

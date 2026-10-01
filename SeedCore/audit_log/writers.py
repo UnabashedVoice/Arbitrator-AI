@@ -152,6 +152,46 @@ def write_compendium_consulted(
     )
 
 
+def write_escalation(
+    session_id: str,
+    escalation_dict: dict,
+    manifest_id: str,
+    node_id: str = "local",
+) -> AuditEntry:
+    """
+    Log an escalation: every trigger (Ethics Core hard constraints, the
+    analysis gate's conditions, channels' material requests). The decision
+    brief has its own entry (write_decision_brief).
+    """
+    return AuditEntry(
+        kind=EntryKind.ESCALATION,
+        session_id=session_id,
+        node_id=node_id,
+        related_ids=[manifest_id],
+        payload=escalation_dict,
+    )
+
+
+def write_decision_brief(
+    session_id: str,
+    brief_dict: dict,
+    manifest_id: str,
+    node_id: str = "local",
+) -> AuditEntry:
+    """
+    Log the decision brief: the options with their cases for and against,
+    the reasoned lean, the model's view on review, and every attempt's raw
+    output and reasoning.
+    """
+    return AuditEntry(
+        kind=EntryKind.DECISION_BRIEF,
+        session_id=session_id,
+        node_id=node_id,
+        related_ids=[manifest_id],
+        payload=brief_dict,
+    )
+
+
 def write_consequence_map(
     session_id: str,
     consequence_map_dict: dict,

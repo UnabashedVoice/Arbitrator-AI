@@ -73,6 +73,8 @@ def run_command(
         continue_after_escalate=config.get("continue_after_escalate"),
         arbitrator_version=config.get("arbitrator_version"),
         use_compendium=compendium or bool(config.get("compendium")),
+        ethics_gate=config.get("ethics_gate") or "prescreen",
+        decision_brief=bool(config.get("decision_brief", True)),
     )
 
     try:

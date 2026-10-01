@@ -811,6 +811,11 @@ def _discover_candidates() -> list[ModelBackend]:
         return [LMStudioBackend(
             model=lmstudio_model,
             base_url=os.environ.get("ARBITRATOR_LMSTUDIO_URL", "http://localhost:1234"),
+            reasoning_effort=os.environ.get("ARBITRATOR_REASONING_EFFORT", "medium"),
+            # ARBITRATOR_CONTEXT_LENGTH: the model's loaded context. Every call may use
+            # all the room its prompt leaves (LMStudioBackend._answer_budget); unset (0),
+            # the backend asks LM Studio for the loaded length itself.
+            context_length=int(os.environ.get("ARBITRATOR_CONTEXT_LENGTH", "0")),
         )]
 
     # Anthropic: probe key availability first (no network call for key check)

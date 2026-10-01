@@ -408,3 +408,54 @@ def context_to_proposal(
 
 # Avoid circular import — Optional imported here
 from typing import Optional
+
+
+# ---------------------------------------------------------------------------
+# Post-screen: the Ethics Core's input rebuilt from the analysis
+# ---------------------------------------------------------------------------
+
+def analysis_to_proposal(pre: ActionProposal, consequence_map, channel_outputs: list) -> ActionProposal:
+    """
+    The pre-screen proposal with its structural estimates replaced by what the
+    channels found. This is the "Phase 2" the module docstring anticipates.
+
+    Replaced:
+        harm_score, benefit_score   the consequence map's aggregate scores
+        uncertainty                 1 - the synthesis confidence
+        reversibility               from the reversibility the channels gave their
+                                    significant (magnitude >= 0.4) harm findings:
+                                    any irreversible one -> irreversible; all
+                                    reversible -> fully reversible; otherwise
+                                    partially reversible if some are; otherwise
+                                    the pre-screen's value stands
+    Kept from the pre-screen: consciousness types, harm and benefit types,
+    scopes and long-term risk (the channels don't report these in a form the
+    Ethics Core can take), and mitigation_proposed (Arbitrator's recommended
+    mitigations are not the submitter's).
+    """
+    import dataclasses
+
+    flags = [f.reversible for o in channel_outputs if o.succeeded for f in o.harm_findings
+             if f.magnitude >= 0.4]
+    known = [r for r in flags if r is not None]
+    reversibility = pre.reversibility
+    if any(r is False for r in known):
+        reversibility = Reversibility.IRREVERSIBLE
+    elif known and all(known):
+        reversibility = Reversibility.FULLY_REVERSIBLE
+    elif any(known):
+        reversibility = Reversibility.PARTIALLY_REVERSIBLE
+
+    confidence = getattr(consequence_map, "synthesis_confidence", None)
+    uncertainty = pre.uncertainty if confidence is None else round(min(0.95, max(0.05, 1.0 - confidence)), 4)
+    return dataclasses.replace(
+        pre,
+        harm_score=round(min(1.0, max(0.0, consequence_map.overall_harm_score)), 4),
+        benefit_score=round(min(1.0, max(0.0, consequence_map.overall_benefit_score)), 4),
+        uncertainty=uncertainty,
+        reversibility=reversibility,
+        context=(pre.context or "") + " Post-screen: harm, benefit, uncertainty and reversibility "
+                                      "taken from the channels' analysis.",
+        proposal_id=str(uuid.uuid4()),
+        submitted_at=datetime.now(timezone.utc).isoformat(),
+    )

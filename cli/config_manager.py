@@ -38,6 +38,8 @@ DEFAULTS: dict[str, Any] = {
     "continue_after_escalate":  True,
     "max_channels":             None,
     "compendium":               False,    # consult the Compendium on every run
+    "ethics_gate":              "prescreen",  # prescreen | analysis (see OrchestratorConfig)
+    "decision_brief":           True,     # end every analysed run with a decision brief
 
     # Display
     "color":                True,

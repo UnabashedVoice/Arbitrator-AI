@@ -90,11 +90,16 @@ class Finding:
         citations:      Any data sources, studies, or references cited.
         tags:           Domain tags for grouping (e.g., "economic", "health").
         finding_id:     Deterministic ID in format '{channel_name}_{index:02d}'.
-                        Set by the parser from model output or generated as fallback.
+                        Always assigned by the parser, never taken from the model:
+                        models don't reliably follow the convention, and a reused
+                        id makes feedback, references and the Annals ambiguous.
+        model_finding_id: The id the model wrote, kept for audit when it differs.
         references_finding_id: finding_ids from other channels that this finding
                         directly responds to, builds on, or challenges. Used by
                         secondary channels to link their analysis back to the
                         primary channel findings that triggered it.
+        unresolved_references: references the model gave that match no finding
+                        the channel was shown; kept apart rather than dropped.
     """
     summary: str
     detail: str
@@ -108,6 +113,8 @@ class Finding:
     tags: list[str] = field(default_factory=list)
     finding_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     references_finding_id: list[str] = field(default_factory=list)
+    model_finding_id: Optional[str] = None
+    unresolved_references: list[str] = field(default_factory=list)
 
     def __post_init__(self):
         if not (0.0 <= self.magnitude <= 1.0):
@@ -129,6 +136,8 @@ class Finding:
             "citations": self.citations,
             "tags": self.tags,
             "references_finding_id": self.references_finding_id,
+            "model_finding_id": self.model_finding_id,
+            "unresolved_references": self.unresolved_references,
         }
 
 
@@ -179,6 +188,12 @@ class ChannelOutput:
         error_message:      Error detail if status != SUCCESS.
         output_id:          Auto-generated UUID.
         generated_at:       UTC timestamp.
+        escalation_request: The channel's own request for human review, if it made
+                            one: {"requested": bool, "reason": str, "what_to_decide": str}.
+        raw_response:       The model's complete output for the call this output came
+                            from, reasoning included.
+        reasoning:          The reasoning part of raw_response (a gpt-oss analysis
+                            channel or a <think> block), if any.
     """
     channel_name: str
     status: ChannelStatus
@@ -194,6 +209,10 @@ class ChannelOutput:
     error_message: Optional[str] = None
     output_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     generated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    escalation_request: Optional[dict] = None
+    raw_response: Optional[str] = None
+    reasoning: Optional[str] = None
+    finish_reason: Optional[str] = None   # "length": the model ran out of room mid-answer
 
     def __post_init__(self):
         for score_name, score_val in [
@@ -236,4 +255,8 @@ class ChannelOutput:
             "processing_time_ms": self.processing_time_ms,
             "error_message": self.error_message,
             "generated_at": self.generated_at,
+            "escalation_request": self.escalation_request,
+            "reasoning": self.reasoning,
+            "finish_reason": self.finish_reason,
+            "raw_response": self.raw_response,
         }

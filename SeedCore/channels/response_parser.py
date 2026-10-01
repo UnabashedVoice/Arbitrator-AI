@@ -67,7 +67,12 @@ RESPONSE_SCHEMA = """
       "magnitude": <float 0.0-1.0>
     }
   ],
-  "adversarial_challenges": ["<string>", ...]
+  "adversarial_challenges": ["<string>", ...],
+  "escalation_request": {
+    "requested": <true|false>,
+    "reason": "<string: why this needs human judgment that analysis cannot supply; empty if not requested>",
+    "what_to_decide": "<string: the specific question a human must answer; empty if not requested>"
+  }
 }
 """
 
@@ -221,7 +226,8 @@ def _parse_str_list(value) -> list[str]:
 # Finding parser
 # ---------------------------------------------------------------------------
 
-def _parse_finding(raw: dict, channel_name: str, index: int) -> Optional[Finding]:
+def _parse_finding(raw: dict, channel_name: str, index: int,
+                   known_ids: Optional[set] = None) -> Optional[Finding]:
     """Parse one finding dict into a Finding. Returns None if critically malformed."""
     summary = str(raw.get("summary", "")).strip()
     if not summary:
@@ -242,12 +248,18 @@ def _parse_finding(raw: dict, channel_name: str, index: int) -> Optional[Finding
     if channel_name not in tags:
         tags.insert(0, channel_name)
 
-    # Use model-supplied finding_id if valid, otherwise generate deterministic fallback
+    # The id is always assigned here, never taken from the model. In the first
+    # local-model batch (2026-09-26) 26% of model-written ids broke the
+    # '{channel}_{index}' convention, and some reused another channel's prefix
+    # (the uncertainty channel writing 'economic_00'), which made ids collide.
+    # The model's own id is kept for audit when it differs.
     raw_fid = str(raw.get("finding_id", "")).strip()
-    if raw_fid:
-        finding_id = raw_fid
-    else:
-        finding_id = f"{channel_name}_{index:02d}"
+    finding_id = f"{channel_name}_{index:02d}"
+    model_finding_id = raw_fid if raw_fid and raw_fid != finding_id else None
+    unresolved: list[str] = []
+    if known_ids is not None:
+        unresolved = [r for r in references_finding_id if r not in known_ids]
+        references_finding_id = [r for r in references_finding_id if r in known_ids]
 
     try:
         return Finding(
@@ -263,6 +275,8 @@ def _parse_finding(raw: dict, channel_name: str, index: int) -> Optional[Finding
             citations=citations,
             tags=tags,
             references_finding_id=references_finding_id,
+            model_finding_id=model_finding_id,
+            unresolved_references=unresolved,
         )
     except ValueError:
         return None
@@ -298,6 +312,7 @@ def parse_channel_response(
     channel_name: str,
     model_id: str = "unknown",
     processing_time_ms: Optional[int] = None,
+    known_ids: Optional[set] = None,
 ) -> ChannelOutput:
     """
     Parse a raw model response string into a validated ChannelOutput.
@@ -310,6 +325,9 @@ def parse_channel_response(
         channel_name:       Which channel this response is for.
         model_id:           Backend identifier for audit logging.
         processing_time_ms: How long the backend call took.
+        known_ids:          finding_ids the channel was shown. References to
+                            anything else go to Finding.unresolved_references.
+                            None skips the check.
 
     Returns:
         ChannelOutput with status SUCCESS or FAILED.
@@ -354,9 +372,10 @@ def parse_channel_response(
     raw_findings = data.get("findings", [])
     findings = []
     if isinstance(raw_findings, list):
-        for index, raw in enumerate(raw_findings):
+        for raw in raw_findings:
             if isinstance(raw, dict):
-                f = _parse_finding(raw, channel_name, index)
+                # Numbered by position among the findings kept, so ids stay contiguous.
+                f = _parse_finding(raw, channel_name, len(findings), known_ids)
                 if f is not None:
                     findings.append(f)
 
@@ -374,6 +393,16 @@ def parse_channel_response(
     raw_challenges = data.get("adversarial_challenges", [])
     adversarial_challenges = _parse_str_list(raw_challenges)
 
+    # --- Parse the channel's own escalation request ---
+    escalation_request = None
+    raw_esc = data.get("escalation_request")
+    if isinstance(raw_esc, dict) and _parse_bool_or_none(raw_esc.get("requested")):
+        escalation_request = {
+            "requested": True,
+            "reason": str(raw_esc.get("reason") or "").strip(),
+            "what_to_decide": str(raw_esc.get("what_to_decide") or "").strip(),
+        }
+
     return ChannelOutput(
         channel_name=channel_name,
         status=ChannelStatus.SUCCESS,
@@ -386,4 +415,5 @@ def parse_channel_response(
         adversarial_challenges=adversarial_challenges,
         model_id=model_id,
         processing_time_ms=processing_time_ms,
+        escalation_request=escalation_request,
     )

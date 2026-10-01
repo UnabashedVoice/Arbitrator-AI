@@ -64,6 +64,8 @@ class EntryKind(Enum):
     ETHICS_EVALUATED = "ethics_evaluated"           # EthicsEvaluation from Ethics Core
     CHANNEL_OUTPUT = "channel_output"               # Output from a single channel
     COMPENDIUM_CONSULTED = "compendium_consulted"   # Compendium entries chosen and shown to a channel
+    ESCALATION = "escalation"                       # What triggered an escalation for human review
+    DECISION_BRIEF = "decision_brief"               # The decision brief, with every attempt's raw output
     CONSEQUENCE_MAP = "consequence_map"             # ConsequenceMap from Synthesizer
     FEEDBACK_RECEIVED = "feedback_received"         # Feedback submission
     HUMAN_REVIEW = "human_review"                   # Human review decision
