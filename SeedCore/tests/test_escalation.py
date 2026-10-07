@@ -44,6 +44,12 @@ BRIEF = {
                          "would_change_if": "hosts are few and wealthy"},
     "set_aside": [{"option": "adopt", "because": "It puts a city-wide cost on a narrow group."},
                   {"option": "defer", "because": "The risk is already well known."}],
+    "justification": {
+        "argument": "Those who gain from the wall should share its cost.",
+        "principles": [{"principle": "benefit principle of taxation", "source": "own knowledge",
+                        "how_it_applies": "The whole city benefits, so the whole city pays."}],
+        "strongest_objection": "Owners far from the coast gain little.",
+        "reply": "Their property values and services still depend on the protected districts."},
     "review": {"needed": False, "why": "An ordinary fiscal choice for the council."},
 }
 
@@ -122,6 +128,16 @@ class TestBrief(unittest.TestCase):
         self.assertIn("('defer') needs its own 'case_against'", problems)
         self.assertIn("missing: defer", problems)
         self.assertIn("provisional_lean.reasoning", problems)
+
+    def test_brief_must_justify_its_lean(self):
+        bad = copy.deepcopy(BRIEF)
+        del bad["justification"]
+        self.assertIn("'justification' is required", " ".join(validate_brief(bad)))
+        bad["justification"] = {"argument": "It is fair.", "principles": [{"principle": "fairness"}],
+                                "strongest_objection": "", "reply": "n/a"}
+        problems = " ".join(validate_brief(bad))
+        self.assertIn("justification.strongest_objection", problems)
+        self.assertIn("justification.principles", problems)
 
     def test_brief_needs_a_view_on_review(self):
         bad = copy.deepcopy(BRIEF)

@@ -305,6 +305,15 @@ def _render_brief(written: dict) -> list[str]:
                        indent=2))
     lines.append(_wrap(f"Reasoning: {lean.get('reasoning')}", indent=4))
     lines.append(_wrap(f"Would change if: {lean.get('would_change_if')}", indent=4))
+    just = brief.get("justification") or {}
+    if just:
+        lines.append(_wrap(f"{bold('Justification')}: {just.get('argument')}", indent=2))
+        for p in just.get("principles", []):
+            if isinstance(p, dict):
+                lines.append(_wrap(f"- {p.get('principle')} ({p.get('source') or 'source unstated'}): "
+                                   f"{p.get('how_it_applies')}", indent=4))
+        lines.append(_wrap(f"Strongest objection: {just.get('strongest_objection')}", indent=4))
+        lines.append(_wrap(f"Reply: {just.get('reply')}", indent=4))
     for u in brief.get("uncertainties", []):
         lines.append(_wrap(f"Uncertain: {u.get('what')}; would resolve it: {u.get('would_resolve_it')}", indent=2))
     review = brief.get("review") or {}

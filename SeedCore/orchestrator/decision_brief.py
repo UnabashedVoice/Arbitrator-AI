@@ -16,6 +16,11 @@ resolve it:
     - a provisional lean among the options: which one, how confident, the full
       reasoning for choosing it, what would change it, and for every other
       option the reason it was set aside
+    - the justification for the lean: why it is the right choice ethically and
+      philosophically, not only the workable one, with the principles it rests
+      on, the strongest objection to it, and a reply. The lean's reasoning is
+      often prudential (risk, cost, reversibility); added 2026-10-03, after a
+      trend-conflict smoke test whose brief gave no ethical case at all
     - the model's own view of whether this decision needs human sign-off
 
 Escalation is decided separately and by rule (the Ethics Core's hard
@@ -61,6 +66,12 @@ The people deciding must be able to resolve the decision with your brief in hand
   reasoning for choosing it over the others, and what would change your mind. Then, for
   every other option, the reason you set it aside. Give a lean even when the case is hard;
   that is the point.
+- the justification for your lean: why it is the right choice ethically and philosophically,
+  not merely the workable or least risky one. Name the principles it rests on, where each
+  comes from (a philosophical source shown below, by its id, or your own knowledge, said as
+  such) and how it applies here. Then give the strongest ethical objection to your lean and
+  your reply to it. If the honest answer is that the lean is only prudentially justified,
+  say so.
 - whether you think this decision needs human sign-off, and why. If the run was escalated
   and you think it need not have been, say so; if it wasn't and you think it should have
   been, say so. Your view is recorded beside the rule's verdict and changes nothing by itself.
@@ -84,6 +95,10 @@ Respond ONLY with a JSON object in exactly this shape, with no text outside it:
   "provisional_lean": {"option": "<an option id>", "confidence": <0.0-1.0>,
                        "reasoning": "<why this option over the others>", "would_change_if": "<string>"},
   "set_aside": [{"option": "<another option id>", "because": "<string>"}],
+  "justification": {"argument": "<why the lean is right, not merely workable>",
+                    "principles": [{"principle": "<string>", "source": "<a source id, or 'own knowledge'>",
+                                    "how_it_applies": "<string>"}],
+                    "strongest_objection": "<string>", "reply": "<string>"},
   "review": {"needed": <true|false>, "why": "<string>"}
 }"""
 
@@ -202,6 +217,17 @@ def validate_brief(brief: dict) -> list[str]:
         missing = [i for i in ids if i != chosen and i not in explained]
         if missing:
             errs.append("'set_aside' must explain every option not chosen; missing: " + ", ".join(missing))
+    just = brief.get("justification")
+    if not isinstance(just, dict):
+        errs.append("'justification' is required: why the lean is right, not merely workable")
+    else:
+        for key in ("argument", "strongest_objection", "reply"):
+            if not _text(just.get(key)):
+                errs.append(f"'justification.{key}' is required")
+        ps = just.get("principles")
+        if not isinstance(ps, list) or not [p for p in ps if isinstance(p, dict) and _text(p.get("principle"))
+                                             and _text(p.get("how_it_applies"))]:
+            errs.append("'justification.principles' must name at least one principle and how it applies")
     review = brief.get("review")
     if not isinstance(review, dict) or not isinstance(review.get("needed"), bool) or not _text(review.get("why")):
         errs.append("'review' needs 'needed' (true or false) and 'why'")

@@ -23,8 +23,16 @@ Arbitrator (public as **Arbitrator-AI**, `github.com/UnabashedVoice/Arbitrator-A
 | 2026-09-25 | Annals + fixes | `run --annals`; local folder renamed to `Arbitrator` (fixing imports that had been silently broken); UTF-8 console guard; first real local runs logged |
 | 2026-09-26 | Committed 2026-09-27 | LM Studio backend, Compendium consultation, `--annals-record`; first full-stack batch (5 questions × 3 cycles × 2 models) |
 | 2026-09-28 → 09-30 | Committed 2026-10-01 | Decision brief for every run; analysis gate with Rule B; thought logs; no fixed context or output caps (budgets follow the loaded window) |
+| 2026-10-03 | Committed 2026-10-07 | The decision brief must justify its lean ethically, not only prudentially |
 
 ---
+
+## 2026-10-03 (committed 2026-10-07)
+
+### Added: the brief justifies its lean
+The trend-conflict smoke test (`System-Runs/2026-10-03-trend-conflicts`, t01 on gpt-oss-20b) asked what makes an adjustment "the correct ethical and philosophical choice". The brief's lean reasoning came back entirely prudential (risk, cost, reversibility), because the brief had nowhere to put an ethical case.
+- **`justification`** is a new required field in the brief. It holds an `argument` for why the lean is right and not merely workable, plus the `principles` it rests on. Each principle has a `source`, either a Compendium id or "own knowledge", and `how_it_applies`. It also holds the `strongest_objection` and a `reply`. The prompt allows an honest "only prudentially justified".
+- `validate_brief` requires it, so a brief without it is retried once. The CLI shows it after the lean. 803 tests pass.
 
 ## 2026-09-28 to 09-30 (committed 2026-10-01)
 
